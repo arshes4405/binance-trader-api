@@ -23,7 +23,8 @@ const FavoriteCoinSchema = new mongoose.Schema({
   addedAt: { type: Date, default: Date.now }
 });
 
-const FavoriteCoin = mongoose.models.FavoriteCoin || mongoose.model('FavoriteCoin', FavoriteCoinSchema);
+// 수정 후
+const FavoriteCoin = mongoose.models.FavoriteCoin || mongoose.model('FavoriteCoin', FavoriteCoinSchema, 'favorite_coins');
 
 // 사용자 설정 스키마
 const UserSettingsSchema = new mongoose.Schema({
