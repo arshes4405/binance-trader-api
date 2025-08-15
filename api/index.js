@@ -1,4 +1,4 @@
-// vercel/api/index.js - GET 방식을 지원하도록 수정
+// vercel/api/index.js - 사용자별 즐겨찾기 관리
 
 const { MongoClient } = require('mongodb');
 
@@ -31,58 +31,90 @@ module.exports = async (req, res) => {
     switch (action) {
       case 'getFavoriteCoins':
         if (method === 'GET') {
-          const coins = await db.collection('favorite_coins').find({}).toArray();
+          const { username } = query;
+          
+          if (!username) {
+            return res.status(400).json({ success: false, message: 'Username is required' });
+          }
+
+          // 사용자별 즐겨찾기 코인 조회
+          const coins = await db.collection('favorite_coins').find({ username }).toArray();
           return res.status(200).json(coins); // 직접 배열 반환
         }
         break;
 
       case 'addFavoriteCoin':
         if (method === 'GET') {
-          // GET 방식으로 코인 추가
-          const { symbol } = query;
+          const { username, symbol } = query;
           
-          if (!symbol) {
-            return res.status(400).json({ success: false, message: 'Symbol is required' });
+          if (!username || !symbol) {
+            return res.status(400).json({ 
+              success: false, 
+              message: 'Username and symbol are required' 
+            });
           }
 
-          // 중복 체크
-          const existingCoin = await db.collection('favorite_coins').findOne({ symbol });
+          // 사용자별 중복 체크
+          const existingCoin = await db.collection('favorite_coins').findOne({ 
+            username, 
+            symbol 
+          });
+          
           if (existingCoin) {
-            return res.status(400).json({ success: false, message: 'Coin already exists' });
+            return res.status(400).json({ 
+              success: false, 
+              message: 'Coin already exists for this user' 
+            });
           }
 
           const newCoin = {
+            username,
             symbol,
             addedAt: new Date().toISOString()
           };
           
           await db.collection('favorite_coins').insertOne(newCoin);
-          return res.status(201).json({ success: true, data: newCoin, message: 'Coin added successfully' });
+          return res.status(201).json({ 
+            success: true, 
+            data: newCoin, 
+            message: 'Coin added successfully' 
+          });
         }
         break;
 
       case 'removeFavoriteCoin':
         if (method === 'GET') {
-          // GET 방식으로 코인 삭제
-          const { symbol } = query;
+          const { username, symbol } = query;
           
-          if (!symbol) {
-            return res.status(400).json({ success: false, message: 'Symbol is required' });
+          if (!username || !symbol) {
+            return res.status(400).json({ 
+              success: false, 
+              message: 'Username and symbol are required' 
+            });
           }
 
-          const result = await db.collection('favorite_coins').deleteOne({ symbol });
+          // 사용자별 코인 삭제
+          const result = await db.collection('favorite_coins').deleteOne({ 
+            username, 
+            symbol 
+          });
           
           if (result.deletedCount > 0) {
-            return res.status(200).json({ success: true, message: 'Coin removed successfully' });
+            return res.status(200).json({ 
+              success: true, 
+              message: 'Coin removed successfully' 
+            });
           } else {
-            return res.status(404).json({ success: false, message: 'Coin not found' });
+            return res.status(404).json({ 
+              success: false, 
+              message: 'Coin not found for this user' 
+            });
           }
         }
         break;
 
       case 'saveUserSettings':
         if (method === 'GET') {
-          // GET 방식으로 사용자 설정 저장
           const { username, email, password, createdAt } = query;
           
           if (!username || !email || !password) {
@@ -95,7 +127,10 @@ module.exports = async (req, res) => {
           // 중복 사용자 체크
           const existingUser = await db.collection('user_settings').findOne({ username });
           if (existingUser) {
-            return res.status(400).json({ success: false, message: 'Username already exists' });
+            return res.status(400).json({ 
+              success: false, 
+              message: 'Username already exists' 
+            });
           }
 
           const newUser = {
@@ -120,7 +155,10 @@ module.exports = async (req, res) => {
           const { username } = query;
           
           if (!username) {
-            return res.status(400).json({ success: false, message: 'Username is required' });
+            return res.status(400).json({ 
+              success: false, 
+              message: 'Username is required' 
+            });
           }
 
           const user = await db.collection('user_settings').findOne({ username });
@@ -128,13 +166,19 @@ module.exports = async (req, res) => {
           if (user) {
             return res.status(200).json({ success: true, data: user });
           } else {
-            return res.status(404).json({ success: false, message: 'User not found' });
+            return res.status(404).json({ 
+              success: false, 
+              message: 'User not found' 
+            });
           }
         }
         break;
 
       default:
-        return res.status(400).json({ success: false, message: 'Invalid action' });
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Invalid action' 
+        });
     }
 
     // method가 맞지 않는 경우
