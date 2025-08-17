@@ -433,6 +433,167 @@ module.exports = async (req, res) => {
         }
         break;
 
+// index.js의 switch 문에 추가할 사용자 관련 API
+
+      // ===== 사용자 관리 =====
+      case 'saveUserSettings':
+        if (method === 'GET') {
+          const { username, email, password, createdAt } = query;
+          
+          if (!username || !email || !password) {
+            return res.status(400).json({ 
+              success: false, 
+              message: 'Username, email, and password are required' 
+            });
+          }
+
+          // 기존 사용자 확인
+          const existingUser = await db.collection('user_settings').findOne({ 
+            $or: [
+              { username: username },
+              { email: email }
+            ]
+          });
+          
+          if (existingUser) {
+            return res.status(400).json({ 
+              success: false, 
+              message: existingUser.username === username ? 
+                'Username already exists' : 'Email already exists'
+            });
+          }
+
+          const userData = {
+            username,
+            email,
+            password, // 이미 해시된 상태로 전달됨
+            createdAt: createdAt || new Date().toISOString()
+          };
+          
+          const result = await db.collection('user_settings').insertOne(userData);
+          
+          return res.status(201).json({ 
+            success: true, 
+            data: {
+              _id: result.insertedId.toString(),
+              username: userData.username,
+              email: userData.email,
+              createdAt: userData.createdAt
+            },
+            message: 'User created successfully' 
+          });
+        }
+        break;
+
+      case 'getUserSettings':
+        if (method === 'GET') {
+          const { username } = query;
+          
+          if (!username) {
+            return res.status(400).json({ 
+              success: false, 
+              message: 'Username is required' 
+            });
+          }
+
+          const user = await db.collection('user_settings').findOne({ username });
+          
+          if (user) {
+            // MongoDB ObjectId를 문자열로 변환
+            const userData = {
+              _id: user._id.toString(),
+              username: user.username,
+              email: user.email,
+              password: user.password,
+              createdAt: user.createdAt
+            };
+            
+            return res.status(200).json({ 
+              success: true, 
+              data: userData,
+              message: 'User found successfully' 
+            });
+          } else {
+            return res.status(404).json({ 
+              success: false, 
+              message: 'User not found' 
+            });
+          }
+        }
+        break;
+
+      // 기존 사용자 업데이트 (필요시)
+      case 'updateUserSettings':
+        if (method === 'GET') {
+          const { username, email, password } = query;
+          
+          if (!username) {
+            return res.status(400).json({ 
+              success: false, 
+              message: 'Username is required' 
+            });
+          }
+
+          const updateData = {
+            updatedAt: new Date().toISOString()
+          };
+
+          if (email) updateData.email = email;
+          if (password) updateData.password = password;
+
+          const result = await db.collection('user_settings').updateOne(
+            { username },
+            { $set: updateData }
+          );
+
+          if (result.matchedCount === 0) {
+            return res.status(404).json({ 
+              success: false, 
+              message: 'User not found' 
+            });
+          }
+
+          return res.status(200).json({ 
+            success: true, 
+            message: 'User updated successfully' 
+          });
+        }
+        break;
+
+      // 사용자 삭제 (필요시)
+      case 'deleteUser':
+        if (method === 'GET') {
+          const { username } = query;
+          
+          if (!username) {
+            return res.status(400).json({ 
+              success: false, 
+              message: 'Username is required' 
+            });
+          }
+
+          // 사용자와 관련된 모든 데이터 삭제
+          await db.collection('favorite_coins').deleteMany({ username });
+          await db.collection('signal_configs').deleteMany({ username });
+          await db.collection('market_signals').deleteMany({ username });
+          await db.collection('breakout_states').deleteMany({ username });
+          
+          const result = await db.collection('user_settings').deleteOne({ username });
+
+          if (result.deletedCount === 0) {
+            return res.status(404).json({ 
+              success: false, 
+              message: 'User not found' 
+            });
+          }
+
+          return res.status(200).json({ 
+            success: true, 
+            message: 'User and all related data deleted successfully' 
+          });
+        }
+        break;
+
       // ===== 기본 응답 =====
       default:
         return res.status(400).json({ 
