@@ -1,4 +1,4 @@
-// vercel/api/index.js - 사용자별 즐겨찾기 + 시세포착 관리
+// vercel/api/index.js - DB 기반 돌파 상태 관리 시스템 적용
 
 const { MongoClient } = require('mongodb');
 
@@ -29,7 +29,7 @@ module.exports = async (req, res) => {
     console.log(`API 호출: ${method} ${action}`, { query, body });
 
     switch (action) {
-      // ===== 기존 즐겨찾기 액션들 =====
+      // ===== 기존 즐겨찾기 관리 =====
       case 'getFavoriteCoins':
         if (method === 'GET') {
           const { username } = query;
@@ -76,7 +76,7 @@ module.exports = async (req, res) => {
           return res.status(201).json({ 
             success: true, 
             data: newCoin, 
-            message: 'Coin added successfully' 
+            message: 'Coin added to favorites' 
           });
         }
         break;
@@ -97,149 +97,58 @@ module.exports = async (req, res) => {
             symbol 
           });
           
-          if (result.deletedCount > 0) {
-            return res.status(200).json({ 
-              success: true, 
-              message: 'Coin removed successfully' 
-            });
-          } else {
+          if (result.deletedCount === 0) {
             return res.status(404).json({ 
               success: false, 
-              message: 'Coin not found for this user' 
-            });
-          }
-        }
-        break;
-
-      // ===== 사용자 관리 액션들 =====
-      case 'saveUserSettings':
-        if (method === 'GET') {
-          const { username, email, password, createdAt } = query;
-          
-          if (!username || !email || !password) {
-            return res.status(400).json({ 
-              success: false, 
-              message: 'Username, email, and password are required' 
+              message: 'Coin not found in favorites' 
             });
           }
 
-          const existingUser = await db.collection('user_settings').findOne({ username });
-          if (existingUser) {
-            return res.status(400).json({ 
-              success: false, 
-              message: 'Username already exists' 
-            });
-          }
-
-          const newUser = {
-            username,
-            email,
-            password,
-            createdAt: createdAt || new Date().toISOString()
-          };
-
-          const result = await db.collection('user_settings').insertOne(newUser);
-          
-          return res.status(201).json({ 
+          return res.status(200).json({ 
             success: true, 
-            data: { _id: result.insertedId, ...newUser }, 
-            message: 'User settings saved successfully' 
+            message: 'Coin removed from favorites' 
           });
         }
         break;
 
-      case 'getUserSettings':
-        if (method === 'GET') {
-          const { username } = query;
-          
-          if (!username) {
-            return res.status(400).json({ 
-              success: false, 
-              message: 'Username is required' 
-            });
-          }
-
-          const user = await db.collection('user_settings').findOne({ username });
-          
-          if (user) {
-            return res.status(200).json({ success: true, data: user });
-          } else {
-            return res.status(404).json({ 
-              success: false, 
-              message: 'User not found' 
-            });
-          }
-        }
-        break;
-
-      // ===== 🆕 시세포착 관련 액션들 =====
+      // ===== 시세포착 설정 관리 =====
       case 'saveSignalConfig':
         if (method === 'GET') {
           const { 
-            username, 
-            signalType, 
-            symbol, 
-            timeframe, 
-            checkInterval, 
-            cciPeriod, 
-            cciBreakoutValue, 
-            cciEntryValue, 
-            seedMoney, 
-            isActive 
+            username, signalType, symbol, timeframe, checkInterval, 
+            cciPeriod, cciBreakoutValue, cciEntryValue, seedMoney, isActive 
           } = query;
           
-          if (!username || !signalType || !symbol || !timeframe) {
+          if (!username || !symbol || !signalType) {
             return res.status(400).json({ 
               success: false, 
-              message: 'Username, signalType, symbol, and timeframe are required' 
+              message: 'Username, symbol, and signalType are required' 
             });
           }
 
-          // 기존 설정이 있는지 확인 (username + signalType + symbol + timeframe 조합으로 중복 체크)
-          const existingConfig = await db.collection('signal_configs').findOne({ 
-            username, 
-            signalType, 
-            symbol, 
-            timeframe 
-          });
-
+          const configId = `${username}_${symbol}_${timeframe}_${Date.now()}`;
           const configData = {
+            configId,
             username,
             signalType,
             symbol,
             timeframe,
-            checkInterval: parseInt(checkInterval) || 900, // 기본 15분
+            checkInterval: parseInt(checkInterval) || 300,
             cciPeriod: parseInt(cciPeriod) || 20,
             cciBreakoutValue: parseFloat(cciBreakoutValue) || 100.0,
             cciEntryValue: parseFloat(cciEntryValue) || 90.0,
             seedMoney: parseFloat(seedMoney) || 1000.0,
             isActive: isActive === 'true',
+            createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
 
-          if (existingConfig) {
-            // 기존 설정 업데이트
-            await db.collection('signal_configs').updateOne(
-              { _id: existingConfig._id },
-              { $set: configData }
-            );
-            
-            return res.status(200).json({ 
-              success: true, 
-              data: { ...configData, _id: existingConfig._id },
-              message: 'Signal config updated successfully' 
-            });
-          } else {
-            // 새 설정 생성
-            configData.createdAt = new Date().toISOString();
-            const result = await db.collection('signal_configs').insertOne(configData);
-            
-            return res.status(201).json({ 
-              success: true, 
-              data: { ...configData, _id: result.insertedId },
-              message: 'Signal config saved successfully' 
-            });
-          }
+          await db.collection('signal_configs').insertOne(configData);
+          return res.status(200).json({ 
+            success: true, 
+            data: configData,
+            message: 'Signal config saved successfully' 
+          });
         }
         break;
 
@@ -255,7 +164,6 @@ module.exports = async (req, res) => {
           }
 
           const configs = await db.collection('signal_configs').find({ username }).toArray();
-          
           return res.status(200).json({ 
             success: true, 
             data: configs,
@@ -264,32 +172,78 @@ module.exports = async (req, res) => {
         }
         break;
 
+      case 'updateSignalConfig':
+        if (method === 'GET') {
+          const { configId, isActive } = query;
+          
+          if (!configId) {
+            return res.status(400).json({ 
+              success: false, 
+              message: 'ConfigId is required' 
+            });
+          }
+
+          const updateData = {
+            updatedAt: new Date().toISOString()
+          };
+
+          if (isActive !== undefined) {
+            updateData.isActive = isActive === 'true';
+          }
+
+          const result = await db.collection('signal_configs').updateOne(
+            { configId },
+            { $set: updateData }
+          );
+
+          return res.status(200).json({ 
+            success: true, 
+            message: result.modifiedCount > 0 ? 'Config updated successfully' : 'No config found to update' 
+          });
+        }
+        break;
+
+      case 'deleteSignalConfig':
+        if (method === 'GET') {
+          const { configId } = query;
+          
+          if (!configId) {
+            return res.status(400).json({ 
+              success: false, 
+              message: 'ConfigId is required' 
+            });
+          }
+
+          // 설정과 관련된 상태도 함께 삭제
+          await db.collection('breakout_states').deleteMany({ configId });
+          const result = await db.collection('signal_configs').deleteOne({ configId });
+
+          return res.status(200).json({ 
+            success: true, 
+            message: result.deletedCount > 0 ? 'Config deleted successfully' : 'No config found to delete' 
+          });
+        }
+        break;
+
+      // ===== 시세포착 신호 관리 =====
       case 'saveSignal':
         if (method === 'GET') {
           const { 
-            configId,
-            username, 
-            symbol, 
-            signalType, 
-            direction, 
-            price, 
-            volume, 
-            cciValue, 
-            cciBreakoutValue, 
-            cciEntryValue, 
-            reason, 
-            timeframe 
+            configId, username, symbol, signalType, direction, 
+            price, volume, cciValue, cciBreakoutValue, cciEntryValue, 
+            reason, timeframe 
           } = query;
           
-          if (!username || !symbol || !signalType || !direction) {
+          if (!configId || !username || !symbol) {
             return res.status(400).json({ 
               success: false, 
-              message: 'Username, symbol, signalType, and direction are required' 
+              message: 'ConfigId, username, and symbol are required' 
             });
           }
 
           const signalData = {
-            configId: configId || '',
+            signalId: `${configId}_${Date.now()}`,
+            configId,
             username,
             symbol,
             signalType,
@@ -297,20 +251,19 @@ module.exports = async (req, res) => {
             price: parseFloat(price) || 0.0,
             volume: parseFloat(volume) || 0.0,
             cciValue: parseFloat(cciValue) || 0.0,
-            cciBreakoutValue: parseFloat(cciBreakoutValue) || 0.0,
-            cciEntryValue: parseFloat(cciEntryValue) || 0.0,
-            reason: reason || '',
-            timeframe: timeframe || '15m',
+            cciBreakoutValue: parseFloat(cciBreakoutValue) || 100.0,
+            cciEntryValue: parseFloat(cciEntryValue) || 90.0,
+            reason,
+            timeframe,
             status: 'ACTIVE',
             isRead: false,
-            timestamp: new Date().toISOString()
+            createdAt: new Date().toISOString()
           };
 
-          const result = await db.collection('signals').insertOne(signalData);
-          
-          return res.status(201).json({ 
+          await db.collection('market_signals').insertOne(signalData);
+          return res.status(200).json({ 
             success: true, 
-            data: { ...signalData, _id: result.insertedId },
+            data: signalData,
             message: 'Signal saved successfully' 
           });
         }
@@ -318,7 +271,7 @@ module.exports = async (req, res) => {
 
       case 'getSignals':
         if (method === 'GET') {
-          const { username, limit } = query;
+          const { username } = query;
           
           if (!username) {
             return res.status(400).json({ 
@@ -327,14 +280,11 @@ module.exports = async (req, res) => {
             });
           }
 
-          const limitCount = parseInt(limit) || 50;
-          
-          const signals = await db.collection('signals')
+          const signals = await db.collection('market_signals')
             .find({ username })
-            .sort({ timestamp: -1 })  // 최신 순으로 정렬
-            .limit(limitCount)
+            .sort({ createdAt: -1 })
             .toArray();
-          
+
           return res.status(200).json({ 
             success: true, 
             data: signals,
@@ -343,27 +293,161 @@ module.exports = async (req, res) => {
         }
         break;
 
+      case 'markSignalAsRead':
+        if (method === 'GET') {
+          const { signalId } = query;
+          
+          if (!signalId) {
+            return res.status(400).json({ 
+              success: false, 
+              message: 'SignalId is required' 
+            });
+          }
+
+          const result = await db.collection('market_signals').updateOne(
+            { signalId },
+            { $set: { isRead: true, updatedAt: new Date().toISOString() } }
+          );
+
+          return res.status(200).json({ 
+            success: true, 
+            message: result.modifiedCount > 0 ? 'Signal marked as read' : 'No signal found' 
+          });
+        }
+        break;
+
+      // ===== DB 기반 돌파 상태 관리 시스템 =====
+      case 'saveBreakoutState':
+        if (method === 'GET') {
+          const { 
+            configId, 
+            username, 
+            symbol, 
+            currentState, 
+            lastCciValue, 
+            breakoutValue, 
+            entryValue 
+          } = query;
+          
+          if (!configId || !username || !symbol || !currentState) {
+            return res.status(400).json({ 
+              success: false, 
+              message: 'ConfigId, username, symbol, and currentState are required' 
+            });
+          }
+
+          const stateData = {
+            configId,
+            username,
+            symbol,
+            currentState, // NO_BREAKOUT, LONG_BREAKOUT, SHORT_BREAKOUT
+            lastCciValue: parseFloat(lastCciValue) || 0.0,
+            breakoutValue: parseFloat(breakoutValue) || 100.0,
+            entryValue: parseFloat(entryValue) || 90.0,
+            lastCheckTime: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+
+          // 기존 상태가 있으면 업데이트, 없으면 생성
+          const result = await db.collection('breakout_states').replaceOne(
+            { configId: configId },
+            stateData,
+            { upsert: true }
+          );
+          
+          return res.status(200).json({ 
+            success: true, 
+            data: stateData,
+            message: 'Breakout state saved successfully' 
+          });
+        }
+        break;
+
+      case 'getBreakoutState':
+        if (method === 'GET') {
+          const { configId } = query;
+          
+          if (!configId) {
+            return res.status(400).json({ 
+              success: false, 
+              message: 'ConfigId is required' 
+            });
+          }
+
+          const state = await db.collection('breakout_states').findOne({ configId });
+          
+          if (state) {
+            return res.status(200).json({ 
+              success: true, 
+              data: state,
+              message: 'Breakout state retrieved successfully' 
+            });
+          } else {
+            return res.status(200).json({ 
+              success: true, 
+              data: null,
+              message: 'No breakout state found' 
+            });
+          }
+        }
+        break;
+
+      case 'getAllBreakoutStates':
+        if (method === 'GET') {
+          const { username } = query;
+          
+          if (!username) {
+            return res.status(400).json({ 
+              success: false, 
+              message: 'Username is required' 
+            });
+          }
+
+          const states = await db.collection('breakout_states').find({ username }).toArray();
+          
+          return res.status(200).json({ 
+            success: true, 
+            data: states,
+            message: 'All breakout states retrieved successfully' 
+          });
+        }
+        break;
+
+      case 'deleteBreakoutState':
+        if (method === 'GET') {
+          const { configId } = query;
+          
+          if (!configId) {
+            return res.status(400).json({ 
+              success: false, 
+              message: 'ConfigId is required' 
+            });
+          }
+
+          const result = await db.collection('breakout_states').deleteOne({ configId });
+          
+          return res.status(200).json({ 
+            success: true, 
+            message: result.deletedCount > 0 ? 'Breakout state deleted successfully' : 'No state found to delete' 
+          });
+        }
+        break;
+
+      // ===== 기본 응답 =====
       default:
         return res.status(400).json({ 
           success: false, 
-          message: 'Invalid action' 
+          message: `Unknown action: ${action}` 
         });
     }
-
-    // method가 맞지 않는 경우
-    return res.status(405).json({ 
-      success: false, 
-      message: `Method ${method} not allowed for action ${action}` 
-    });
-
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('API 오류:', error);
     return res.status(500).json({ 
       success: false, 
-      message: 'Server error', 
+      message: 'Internal server error',
       error: error.message 
     });
   } finally {
-    await client.close();
+    // MongoDB 연결을 여기서 닫지 않음 (Vercel의 연결 재사용을 위해)
   }
 };
