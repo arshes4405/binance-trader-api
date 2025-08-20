@@ -112,45 +112,62 @@ module.exports = async (req, res) => {
         break;
 
       // ===== 시세포착 설정 관리 =====
-      case 'saveSignalConfig':
-        if (method === 'GET') {
-          const { 
-            username, signalType, symbol, timeframe, checkInterval, 
-            cciPeriod, cciBreakoutValue, cciEntryValue, seedMoney, isActive 
-          } = query;
-          
-          if (!username || !symbol || !signalType) {
-            return res.status(400).json({ 
-              success: false, 
-              message: 'Username, symbol, and signalType are required' 
-            });
-          }
+        case 'saveSignalConfig':
+            if (method === 'GET') {
+                const {
+                    username, signalType, symbol, timeframe, checkInterval,
+                    cciPeriod, cciBreakoutValue, cciEntryValue, seedMoney, isActive,
+                    autoTrading, // 이 줄 추가!
+                    rsiPeriod, rsiOverbought, rsiOversold, // RSI 필드들도 추가
+                    cortaFastMa, cortaSlowMa, cortaSignalLine, cortaVolumeFactor, cortaRsiConfirm // 코르타 필드들도 추가
+                } = query;
 
-          const configId = `${username}_${symbol}_${timeframe}_${Date.now()}`;
-          const configData = {
-            configId,
-            username,
-            signalType,
-            symbol,
-            timeframe,
-            checkInterval: parseInt(checkInterval) || 300,
-            cciPeriod: parseInt(cciPeriod) || 20,
-            cciBreakoutValue: parseFloat(cciBreakoutValue) || 100.0,
-            cciEntryValue: parseFloat(cciEntryValue) || 90.0,
-            seedMoney: parseFloat(seedMoney) || 1000.0,
-            isActive: isActive === 'true',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          };
+                if (!username || !symbol || !signalType) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Username, symbol, and signalType are required'
+                    });
+                }
 
-          await db.collection('signal_configs').insertOne(configData);
-          return res.status(200).json({ 
-            success: true, 
-            data: configData,
-            message: 'Signal config saved successfully' 
-          });
-        }
-        break;
+                const configId = `${username}_${symbol}_${timeframe}_${Date.now()}`;
+                const configData = {
+                    configId,
+                    username,
+                    signalType,
+                    symbol,
+                    timeframe,
+                    checkInterval: parseInt(checkInterval) || 300,
+                    cciPeriod: parseInt(cciPeriod) || 20,
+                    cciBreakoutValue: parseFloat(cciBreakoutValue) || 100.0,
+                    cciEntryValue: parseFloat(cciEntryValue) || 90.0,
+                    seedMoney: parseFloat(seedMoney) || 1000.0,
+                    isActive: isActive === 'true',
+                    autoTrading: autoTrading === 'true', // 이 줄 추가!
+
+                    // RSI 설정 추가
+                    rsiPeriod: parseInt(rsiPeriod) || 14,
+                    rsiOverbought: parseFloat(rsiOverbought) || 70.0,
+                    rsiOversold: parseFloat(rsiOversold) || 30.0,
+
+                    // 코르타 설정 추가
+                    cortaFastMa: parseInt(cortaFastMa) || 12,
+                    cortaSlowMa: parseInt(cortaSlowMa) || 26,
+                    cortaSignalLine: parseInt(cortaSignalLine) || 9,
+                    cortaVolumeFactor: parseFloat(cortaVolumeFactor) || 1.5,
+                    cortaRsiConfirm: cortaRsiConfirm === 'true',
+
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+
+                await db.collection('signal_configs').insertOne(configData);
+                return res.status(200).json({
+                    success: true,
+                    data: configData,
+                    message: 'Signal config saved successfully'
+                });
+            }
+            break;
 
       case 'getSignalConfigs':
         if (method === 'GET') {
